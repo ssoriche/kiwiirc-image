@@ -1,0 +1,69 @@
+name: Check KiwiIRC Updates
+
+on:
+  schedule:
+    - cron: '0 6 * * *'  # Daily at 6 AM
+  workflow_dispatch:
+
+jobs:
+  check-updates:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Get current KiwiIRC version
+      id: current
+      run: echo "version=$(cat kiwiirc-version.txt)" >> $GITHUB_OUTPUT
+
+    - name: Get latest KiwiIRC version
+      id: latest
+      run: |
+        LATEST=$(curl -s https://api.github.com/repos/kiwiirc/kiwiirc/releases/latest | jq -r '.tag_name // "master"')
+        echo "version=$LATEST" >> $GITHUB_OUTPUT
+
+    - name: Check if update needed
+      id: check
+      run: |
+        if [ "${{ steps.current.outputs.version }}" != "${{ steps.latest.outputs.version }}" ]; then
+          echo "update_needed=true" >> $GITHUB_OUTPUT
+        else
+          echo "update_needed=false" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Create Pull Request
+      if: steps.check.outputs.update_needed == 'true'
+      uses: peter-evans/create-pull-request@v5
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        commit-message: "chore: update KiwiIRC to ${{ steps.latest.outputs.version }}"
+        title: "Update KiwiIRC to ${{ steps.latest.outputs.version }}"
+        body: |
+          This PR updates KiwiIRC from `${{ steps.current.outputs.version }}` to `${{ steps.latest.outputs.version }}`.
+
+          **Changes:**
+          - Updated kiwiirc-version.txt
+
+          **Release Notes:**
+          See: https://github.com/kiwiirc/kiwiirc/releases/tag/${{ steps.latest.outputs.version }}
+        branch: update-kiwiirc-${{ steps.latest.outputs.version }}
+        delete-branch: true
+        base: main
+        labels: |
+          dependencies
+          kiwiirc
+        reviewers: |
+          ${{ github.actor }}
+
+    - name: Update version file
+      if: steps.check.outputs.update_needed == 'true'
+      run: |
+        echo "${{ steps.latest.outputs.version }}" > kiwiirc-version.txt
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add kiwiirc-version.txt
+        git diff --staged --quiet || git commit -m "chore: update KiwiIRC to ${{ steps.latest.outputs.version }}"
