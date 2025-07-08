@@ -9,7 +9,7 @@ RUN apk add --no-cache git
 RUN git clone --depth 1 --branch ${KIWIIRC_VERSION} https://github.com/kiwiirc/kiwiirc.git .
 
 # Install dependencies and build
-RUN npm ci
+RUN npm install
 RUN npm run build
 
 # Production stage
